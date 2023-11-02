@@ -29,6 +29,9 @@ class ScanViewModel : ViewModel() {
     // Le processus de scan
     private var scanJob: Job? = null
 
+    // Durée du scan
+    private val scanDuration = 10000L
+
     /**
      * Le scanner bluetooth
      */
@@ -39,6 +42,19 @@ class ScanViewModel : ViewModel() {
     private val scanSettings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
     private val scanResultsSet = mutableMapOf<String, ScanResult>()
 
+    // Objet qui sera appelé à chaque résultat de scan
+    private val scanCallback = object : ScanCallback() {
+        override fun onScanResult(callbackType: Int, result: ScanResult) {
+            super.onScanResult(callbackType, result)
+            // On ajoute le résultat dans le set, si il n'y est pas déjà
+            // L'ajout retourne null si l'élément n'était pas déjà présent
+            if (scanResultsSet.put(result.device.address, result) == null) {
+                // On envoie la nouvelle liste des appareils scannés
+                scanItemsFlow.value = scanResultsSet.values.toList()
+            }
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun startScan() {
         if(isScanningFlow.value) return
@@ -47,23 +63,10 @@ class ScanViewModel : ViewModel() {
             // On indique que nous sommes en train de scanner
             isScanningFlow.value = true
 
-            // Objet qui sera appelé à chaque résultat de scan
-            val scanCallback = object : ScanCallback() {
-                override fun onScanResult(callbackType: Int, result: ScanResult) {
-                    super.onScanResult(callbackType, result)
-                    // On ajoute le résultat dans le set, si il n'y est pas déjà
-                    // L'ajout retourne null si l'élément n'était pas déjà présent
-                    if (scanResultsSet.put(result.device.address, result) == null) {
-                        // On envoie la nouvelle liste des appareils scannés
-                        scanItemsFlow.value = scanResultsSet.values.toList()
-                    }
-                }
-            }
-
             // On lance le scan BLE a la souscription de scanFlow
             bluetoothLeScanner.startScan(scanFilters, scanSettings, scanCallback)
 
-            delay(10000)
+            delay(scanDuration)
 
             // Lorsque scanFlow est stoppé, on stop le scan BLE
             bluetoothLeScanner.stopScan(scanCallback)
@@ -71,6 +74,12 @@ class ScanViewModel : ViewModel() {
             // On indique que nous ne sommes plus en train de scanner
             isScanningFlow.value = false
         }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun stopScan() {
+        scanJob?.cancel()
+        bluetoothLeScanner.stopScan(scanCallback)
     }
 
     fun clearScanItems() {
